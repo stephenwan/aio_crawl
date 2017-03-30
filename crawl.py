@@ -3,6 +3,7 @@ import aiohttp
 import aiofiles
 import json
 import tqdm
+from pprint import pprint
 
 
 class Resource:
@@ -59,11 +60,14 @@ async def fetch_airport_lookupid(session, semaphor, codes):
 
 
 async def output_to_file(filename, airport_infos):
+    template = '{0}\t{1}\t{2}\n'
     async with aiofiles.open(filename, mode='w') as f:
         for airport_info in tqdm.tqdm(airport_infos,
                                       total=len(airport_infos),
                                       desc='output to file'.ljust(20)):
-            await f.write("%s\t%s\n" % (airport_info['DisplayCode'], airport_info['OlsonTimeZoneId']))
+            await f.write(template.format(airport_info['Id'],
+                                          airport_info['DisplayCode'],
+                                          airport_info['OlsonTimeZoneId']))
 
 
 async def read_from_file(filename):
@@ -79,17 +83,21 @@ async def setup_resource():
             Resource.setup(k, v)
 
 
-async def main(loop, semaphor):
+async def main(loop, semaphor, inputfile, outputfile):
     await setup_resource()
-    airport_codes = await read_from_file('codes.dat')
-    filename = "output.txt"
+    airport_codes = await read_from_file(inputfile)
     async with aiohttp.ClientSession(loop=loop) as session:
         lookupids = await fetch_airport_lookupid(session, semaphor, airport_codes.split(','))
         airport_infos = await fetch_airport_info(session, semaphor, lookupids)
-        await output_to_file(filename, airport_infos)
+        await output_to_file(outputfile, airport_infos)
         return airport_infos
 
 
 sem = asyncio.Semaphore(5)
 loop = asyncio.get_event_loop()
-loop.run_until_complete(main(loop, sem))
+
+inputfile = 'codes.dat'
+outputfile = 'output.dat'
+
+airport_infos = loop.run_until_complete(main(loop, sem, inputfile, outputfile))
+pprint(airport_infos)
